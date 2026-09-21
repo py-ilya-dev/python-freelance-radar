@@ -1,6 +1,7 @@
 import asyncio
 import sqlite3
 from datetime import datetime
+import os  # Подключаем встроенную библиотеку для работы с системой хостинга
 import requests
 from bs4 import BeautifulSoup
 from aiogram import Bot, Dispatcher, F
@@ -8,12 +9,13 @@ from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-# 🛠 Твой токен и ID
-BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-ADMIN_CHAT_ID =  0000000000
+# 🛠 Бот автоматически берёт данные из панели Environment Variables на Render
+BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN")
+ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
+
 
 # Глобальная переменная для интервала проверки в секундах (по умолчанию 5 минут)
 CHECK_INTERVAL = 300
