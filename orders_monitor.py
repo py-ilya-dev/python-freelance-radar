@@ -1,7 +1,7 @@
 import asyncio
 import sqlite3
 from datetime import datetime
-import os  # Подключаем встроенную библиотеку для работы с системой хостинга
+import os  # Обязательно для считывания переменных и порта хостинга
 import requests
 from bs4 import BeautifulSoup
 from aiogram import Bot, Dispatcher, F
@@ -9,20 +9,19 @@ from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-# 🛠 Бот автоматически берёт данные из панели Environment Variables на Render
+# 🛠 БЕЗОПАСНОСТЬ: Код автоматически забирает данные из скрытых настроек хостинга
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN")
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-
 # Глобальная переменная для интервала проверки в секундах (по умолчанию 5 минут)
 CHECK_INTERVAL = 300
 
 class MonitorState(StatesGroup):
     typing_interval = State()      
-    typing_broadcast_text = State() # Шаг ввода текста рассылки (теперь без пароля!)
+    typing_broadcast_text = State() 
 
 # === БАЗА ДАННЫХ ===
 def init_monitor_db():
@@ -65,11 +64,11 @@ def get_all_users():
     conn = sqlite3.connect("monitor.db")
     cursor = conn.cursor()
     cursor.execute("SELECT user_id FROM users")
-    users = [row[0] for row in cursor.fetchall()] # Исправили извлечение ID из кортежа БД!
+    users = [row for row in cursor.fetchall()]  
     conn.close()
     return users
 
-# === МЕНЮ ===
+# === МЕНЮ С ТЕКСТОВЫМИ КНОПКАМИ ===
 def get_monitor_menu():
     kb = [
         [KeyboardButton(text="проверить! 🔍")],
@@ -86,7 +85,7 @@ def get_bio_text():
         "💼 **Я на бирже Kwork:** https://kwork.ru"
     )
 
-# === УМНАЯ ФУНКЦИЯ ПАРСИНГА ===
+# === ФУНКЦИЯ ПАРСИНГА ХАБРА ===
 async def check_freelance_orders(manual_message: Message = None):
     url = "https://habr.com"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
@@ -136,7 +135,7 @@ async def check_freelance_orders(manual_message: Message = None):
         if manual_message:
             await manual_message.answer("❌ Произошла ошибка при сканировании.")
 
-# === ОБРАБОТКА КОМАНД И КНОПОК ===
+# === ОБРАБОТКА ХЕНДЛЕРОВ ===
 
 @dp.message(F.text == "❌ Отмена")
 async def cancel_action(message: Message, state: FSMContext):
@@ -146,12 +145,9 @@ async def cancel_action(message: Message, state: FSMContext):
 @dp.message(F.text == "/start")
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
-    
-    # Заносим пользователя в базу (если это админ, он тоже должен быть в БД для получения рассылок)
     username = f"@{message.from_user.username}" if message.from_user.username else "Нет юзернейма"
     save_user(message.from_user.id, message.from_user.full_name, username)
     
-    # Меню показываем только тебе! Обычный юзер получит просто био
     if message.from_user.id == ADMIN_CHAT_ID:
         await message.answer(
             text=get_bio_text(),
@@ -160,13 +156,8 @@ async def cmd_start(message: Message, state: FSMContext):
             disable_web_page_preview=True
         )
     else:
-        await message.answer(
-            text=get_bio_text(),
-            parse_mode="Markdown",
-            disable_web_page_preview=True
-        )
+        await message.answer(text=get_bio_text(), parse_mode="Markdown", disable_web_page_preview=True)
 
-# Ручная кнопка "проверить! 🔍"
 @dp.message(F.text == "проверить! 🔍")
 async def manual_check(message: Message):
     if message.from_user.id != ADMIN_CHAT_ID:
@@ -174,21 +165,19 @@ async def manual_check(message: Message):
     await message.answer("⏳ Сканирую Хабр Фриланс прямо сейчас...")
     await check_freelance_orders(manual_message=message)
 
-# Кнопка: Информация ℹ️
 @dp.message(F.text == "Информация ℹ️")
 async def show_info_message(message: Message):
     if message.from_user.id != ADMIN_CHAT_ID:
         return
     await message.answer("🔥 **Проект py-ilya-dev v2.0**\nВсе системы мониторинга запущены и работают стабильно!", parse_mode="Markdown")
 
-# Кнопка: поставить время чека
 @dp.message(F.text == "поставить время чека")
 async def set_time_message(message: Message, state: FSMContext):
     if message.from_user.id != ADMIN_CHAT_ID:
         return
     await state.set_state(MonitorState.typing_interval)
     await message.answer(
-        "⏳ **Настройка таймера.**\nУкажи время проверки в минутах (например, отправь в чат число 5 или 10):",
+        "⏳ **Настройка таймера.**\nУкажи время проверки в минутах (например, отправь число 5 или 10):",
         reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="❌ Отмена")]], resize_keyboard=True)
     )
 
@@ -202,19 +191,16 @@ async def process_new_interval(message: Message, state: FSMContext):
             return
         CHECK_INTERVAL = minutes * 60
         await state.clear()
-        await message.answer(f"✅ Успешно! Автоматический радар проверяет Хабр каждые **{minutes} мин.**", reply_markup=get_monitor_menu())
+        await message.answer(f"✅ Успешно! Теперь автоматический радар проверяет Хабр каждые **{minutes} мин.**", reply_markup=get_monitor_menu())
     else:
         await message.answer("Пожалуйста, отправь только число (минуты) или нажми кнопку '❌ Отмена'.")
 
-# --- ОБНОВЛЕННАЯ РАССЫЛКА (ПРОВЕРКА ID И ОТКАЗ ДЛЯ ЮЗЕРОВ) ---
 @dp.message(F.text == "/send")
 async def start_broadcast_direct(message: Message, state: FSMContext):
-    # Если пишет обычный юзер — бот жестко его отшивает!
     if message.from_user.id != ADMIN_CHAT_ID:
         await message.answer("❌ **Ошибка доступа!**\nДанная команда доступна только администратору бота.")
         return
         
-    # Если пишет админ (ты) — сразу пускаем к вводу текста без всяких паролей!
     await state.set_state(MonitorState.typing_broadcast_text)
     await message.answer(
         "📢 **Режим рассылки активирован.**\nВведите текст сообщения, которое получат ВСЕ пользователи бота:",
@@ -227,7 +213,7 @@ async def do_broadcast(message: Message, state: FSMContext):
     await state.clear()
     
     user_ids = get_all_users()
-    await message.answer(f"⏳ Запускаю шифрованную рассылку для {len(user_ids)} пользователей...", reply_markup=get_monitor_menu())
+    await message.answer(f"⏳ Запускаю рассылку для {len(user_ids)} пользователей...", reply_markup=get_monitor_menu())
     
     success_count = 0
     for u_id in user_ids:
@@ -240,17 +226,31 @@ async def do_broadcast(message: Message, state: FSMContext):
             
     await message.answer(f"✅ Рассылка завершена!\nУспешно доставлено: {success_count} из {len(user_ids)}.")
 
-# Фоновый планировщик
+# Фоновый планировщик проверки Хабра
 async def scheduler():
     while True:
         await check_freelance_orders(manual_message=None)
         await asyncio.sleep(CHECK_INTERVAL)
 
+# 🛠 ЗАГЛУШКА ДЛЯ KOYEB: пустой веб-сервер на порту 8080
+async def handle_koyeb_port(request):
+    from aiohttp import web
+    return web.Response(text="Бот-радар freelancechecker активен и запущен в облаке Koyeb 24/7!")
+
 async def main():
     init_monitor_db()
-    print("🚀 Перезапущен идеальный текстовый радар с проверкой прав доступа!")
+    print("🚀 Идеальный текстовый радар готов к запуску!")
+    
     asyncio.create_task(scheduler())
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    
+    from aiohttp import web
+    app = web.Application()
+    app.router.add_get("/", handle_koyeb_port)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    port = int(os.getenv("PORT", "8080"))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    asyncio.create_task(site.start())
+    print(f"🌍 Веб-сервер заглушки для Koyeb поднят на порту {port}")
+    
