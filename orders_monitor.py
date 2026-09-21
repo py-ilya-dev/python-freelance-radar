@@ -9,8 +9,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 # 🛠 Твой токен и ID
-BOT_TOKEN = "8903498656:AAFff-jLT18-YoOtAj4-qHApu5TvVJoPyzY"
-ADMIN_CHAT_ID = 8116778370  
+BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+ADMIN_CHAT_ID =  0000000000
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
